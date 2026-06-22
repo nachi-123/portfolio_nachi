@@ -1565,9 +1565,7 @@
      ========================================================= -->
     <nav id="navbar">
       <div class="nav-inner">
-        <a class="nav-logo" href="#hero" id="nav-logo"
-          >Nachikethus <span>v k</span></a
-        >
+        <a class="nav-logo" href="#hero" id="nav-logo"> Nachikethus</a>
         <ul class="nav-links" id="nav-links">
           <li><a href="#about">About</a></li>
           <li><a href="#skills">Skills</a></li>
@@ -1771,7 +1769,7 @@
             <i class="fa fa-plus"></i> Add Project
           </button>
         </div>
-        <div class="projects-grid reveal" id="projects-grid"></div>
+        <div id="projects-container" class="reveal"></div>
       </div>
     </section>
 
@@ -1988,6 +1986,7 @@
         skills: {},
         experience: [],
         projects: [],
+        projectCategories: [],
         certifications: [],
         achievements: [],
         contact: {
@@ -2295,18 +2294,36 @@
       }
 
       function renderProjects(items) {
-        const grid = document.getElementById("projects-grid");
+        const container = document.getElementById("projects-container");
         if (!items || items.length === 0) {
-          grid.innerHTML = `<div class="empty-state"><i class="fa fa-code-branch"></i>No projects added yet.</div>`;
+          container.innerHTML = `<div class="empty-state"><i class="fa fa-code-branch"></i>No projects added yet.</div>`;
           return;
         }
-        grid.innerHTML = items
-          .map((item) => {
-            const techArr = (item.tech || "")
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean);
-            return `
+
+        // Group by category
+        const groups = {};
+        items.forEach((item) => {
+          const cat = normalizeProjectCategory(item.category);
+          if (!groups[cat]) groups[cat] = [];
+          groups[cat].push(item);
+        });
+
+        let html = "";
+        const categories = getProjectCategories({
+          projects: items,
+          projectCategories: Object.keys(groups),
+        }).filter((cat) => groups[cat] && groups[cat].length > 0);
+
+        for (const cat of categories) {
+          html += `<div style="margin: 2rem 0 1rem; font-size: 1.4rem; font-weight: 600; color: var(--color-cyan);">${escHtml(cat)}</div>`;
+          html += `<div class="projects-grid">`;
+          html += groups[cat]
+            .map((item) => {
+              const techArr = (item.tech || "")
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean);
+              return `
     <div class="project-card">
       <div class="project-img">
         ${
@@ -2330,8 +2347,11 @@
         </div>
       </div>
     </div>`;
-          })
-          .join("");
+            })
+            .join("");
+          html += `</div>`;
+        }
+        container.innerHTML = html;
       }
 
       function renderCertifications(items) {
@@ -2755,6 +2775,13 @@
               type: "text",
               required: true,
             },
+            {
+              key: "category",
+              label: "Category",
+              type: "text",
+              placeholder: "e.g. AI/ML, Web Development, Mobile Apps",
+              required: true,
+            },
             { key: "description", label: "Description", type: "textarea" },
             {
               key: "tech",
@@ -2810,6 +2837,14 @@
       function openListManager(section, editId = null) {
         const cfg = LIST_CONFIGS[section];
         if (!cfg) return;
+        if (section === "projects") {
+          if (editId) {
+            showItemForm(section, editId);
+          } else {
+            showProjectCategories();
+          }
+          return;
+        }
         if (editId) {
           showItemForm(section, editId);
         } else {
@@ -2821,6 +2856,11 @@
         const cfg = LIST_CONFIGS[section];
         const d = getData();
         const items = d[section] || [];
+
+        if (section === "projects") {
+          showProjectCategories();
+          return;
+        }
 
         let body = `
     <div style="margin-bottom:1.25rem">
@@ -2856,12 +2896,150 @@
         openModal(cfg.title, body, null, { hideSave: true });
       }
 
-      function showItemForm(section, itemId) {
+      function showProjectCategories() {
+        const d = getData();
+        const categories = getProjectCategories(d).sort((a, b) =>
+          a.localeCompare(b),
+        );
+        const counts = (d.projects || []).reduce((acc, project) => {
+          const category = normalizeProjectCategory(project.category);
+          acc[category] = (acc[category] || 0) + 1;
+          return acc;
+        }, {});
+
+        let body = `
+    <div style="margin-bottom:1rem">
+      <div class="form-section-title">Project Categories</div>
+      <div class="form-hint">Pick a category to view or add projects, or create a new category first.</div>
+    </div>
+    <div style="margin-bottom:1.25rem">
+      <button class="btn btn-accent btn-sm" onclick="showProjectCategoryForm()">
+        <i class="fa fa-plus"></i> New Category
+      </button>
+    </div>`;
+
+        if (categories.length === 0) {
+          body += `<div class="empty-state"><i class="fa fa-folder-open"></i>No categories yet.</div>`;
+        } else {
+          body += categories
+            .map(
+              (category) => `
+      <div class="list-manager-item">
+        <div class="list-manager-item-info">
+          <div class="list-manager-item-title">${escHtml(category)}</div>
+          <div class="list-manager-item-sub">${counts[category] || 0} project${(counts[category] || 0) === 1 ? "" : "s"}</div>
+        </div>
+        <div class="list-manager-actions">
+          <button class="btn btn-sm btn-outline" onclick="showProjectCategoryProjects('${escAttr(category)}')">Open</button>
+        </div>
+      </div>`,
+            )
+            .join("");
+        }
+
+        openModal("Manage Projects", body, null, { hideSave: true });
+      }
+
+      function showProjectCategoryForm() {
+        const body = `
+    <button class="back-btn" onclick="showProjectCategories()">
+      <i class="fa fa-arrow-left"></i> Back to categories
+    </button>
+    <div class="form-section-title">Create Category</div>
+    <div class="form-group">
+      <label class="form-label">Category Name</label>
+      <input class="form-input" id="new-project-category" placeholder="e.g. AI/ML, Web Development, Automation" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('modal-save-btn').click()}" />
+      <span class="form-hint">Create the category first, then add projects inside it.</span>
+    </div>`;
+
+        openModal(
+          "Create Project Category",
+          body,
+          async () => {
+            const input = document.getElementById("new-project-category");
+            const category = normalizeProjectCategory(input.value);
+            if (!category) {
+              showToast("Please enter a category name");
+              return;
+            }
+            const d = getData();
+            if (getProjectCategories(d).includes(category)) {
+              showToast("Category already exists");
+              return;
+            }
+            upsertProjectCategory(d, category);
+            await savePortfolio(d);
+            closeModal();
+            showToast("Category created");
+            showProjectCategories();
+          },
+          { saveLabel: "Create Category" },
+        );
+      }
+
+      function showProjectCategoryProjects(category) {
+        const d = getData();
+        const activeCategory = normalizeProjectCategory(category);
+        const items = (d.projects || []).filter(
+          (project) =>
+            normalizeProjectCategory(project.category) === activeCategory,
+        );
+
+        let body = `
+    <button class="back-btn" onclick="showProjectCategories()">
+      <i class="fa fa-arrow-left"></i> Back to categories
+    </button>
+    <div class="section-header" style="margin-bottom:1rem">
+      <div>
+        <div class="form-section-title" style="margin-bottom:.35rem">${escHtml(activeCategory)}</div>
+        <div class="form-hint">Projects saved in this category.</div>
+      </div>
+      <button class="btn btn-accent btn-sm" onclick="showItemForm('projects', null, { category: '${escAttr(activeCategory)}' })">
+        <i class="fa fa-plus"></i> Add New Project
+      </button>
+    </div>`;
+
+        if (items.length === 0) {
+          body += `<div class="empty-state"><i class="fa fa-code-branch"></i>No projects in this category yet.</div>`;
+        } else {
+          body += items
+            .map(
+              (item) => `
+      <div class="list-manager-item">
+        <div class="list-manager-item-info">
+          <div class="list-manager-item-title">${escHtml(item.title || "Untitled")}</div>
+          <div class="list-manager-item-sub">${escHtml((item.tech || "").slice(0, 60) || activeCategory)}</div>
+        </div>
+        <div class="list-manager-actions">
+          <button class="btn btn-sm btn-outline btn-icon" onclick="showItemForm('projects','${item.id}', { category: '${escAttr(activeCategory)}' })" title="Edit">
+            <i class="fa fa-pen"></i>
+          </button>
+          <button class="btn btn-sm btn-danger btn-icon" onclick="deleteItemFromModal('projects','${item.id}')" title="Delete">
+            <i class="fa fa-trash"></i>
+          </button>
+        </div>
+      </div>`,
+            )
+            .join("");
+        }
+
+        openModal(`Projects: ${activeCategory}`, body, null, {
+          hideSave: true,
+        });
+      }
+
+      function showItemForm(section, itemId, context = {}) {
         const cfg = LIST_CONFIGS[section];
         const d = getData();
         const items = d[section] || [];
         const item = itemId ? items.find((i) => i.id === itemId) : null;
         const isNew = !item;
+        const projectCategory =
+          section === "projects"
+            ? normalizeProjectCategory(
+                context.category || (item ? item.category : "AI/ML"),
+              )
+            : "";
 
         let body = `
     <button class="back-btn" onclick="showItemList('${section}')">
@@ -2870,17 +3048,30 @@
     <div class="form-section-title">${isNew ? "Add" : "Edit"} ${cfg.itemName}</div>`;
 
         body += cfg.fields
-          .map(
-            (f) => `
+          .map((f) => {
+            let datalistHtml = "";
+            let inputAttr = "";
+            let inputValue = (item || {})[f.key] || "";
+            if (f.key === "category" && section === "projects") {
+              const cats = getProjectCategories(d);
+              datalistHtml = `<datalist id="dl-category">${cats
+                .map((c) => `<option value="${escAttr(c)}">`)
+                .join("")}</datalist>`;
+              inputAttr = `list="dl-category"`;
+              inputValue = item
+                ? item.category || projectCategory
+                : projectCategory;
+            }
+            return `
     <div class="form-group">
       <label class="form-label">${escHtml(f.label)}${f.required ? ' <span style="color:#f87171">*</span>' : ""}</label>
       ${
         f.type === "textarea"
-          ? `<textarea class="form-textarea" id="lf-${f.key}" rows="4" placeholder="${escAttr(f.placeholder || "")}">${escHtml((item || {})[f.key] || "")}</textarea>`
-          : `<input class="form-input" id="lf-${f.key}" type="${f.type || "text"}" value="${escAttr((item || {})[f.key] || "")}" placeholder="${escAttr(f.placeholder || "")}" />`
+          ? `<textarea class="form-textarea" id="lf-${f.key}" rows="4" placeholder="${escAttr(f.placeholder || "")}">${escHtml(inputValue)}</textarea>`
+          : `<input class="form-input" id="lf-${f.key}" type="${f.type || "text"}" ${inputAttr} value="${escAttr(inputValue)}" placeholder="${escAttr(f.placeholder || "")}" />${datalistHtml}`
       }
-    </div>`,
-          )
+    </div>`;
+          })
           .join("");
 
         openModal(
@@ -2907,6 +3098,12 @@
 
             const d2 = getData();
             const list = d2[section] || [];
+            if (section === "projects") {
+              values.category = normalizeProjectCategory(
+                values.category || projectCategory,
+              );
+              upsertProjectCategory(d2, values.category);
+            }
             if (isNew) {
               values.id = section.slice(0, 3) + Date.now();
               list.push(values);
@@ -3064,6 +3261,30 @@
         toast.classList.add("show");
         clearTimeout(toast._timer);
         toast._timer = setTimeout(() => toast.classList.remove("show"), 3000);
+      }
+
+      function normalizeProjectCategory(category) {
+        return (category || "AI/ML").trim() || "AI/ML";
+      }
+
+      function getProjectCategories(data = getData()) {
+        const seen = new Set(["AI/ML"]);
+        (data.projectCategories || []).forEach((category) => {
+          seen.add(normalizeProjectCategory(category));
+        });
+        (data.projects || []).forEach((project) => {
+          seen.add(normalizeProjectCategory(project.category));
+        });
+        return Array.from(seen);
+      }
+
+      function upsertProjectCategory(data, category) {
+        const normalized = normalizeProjectCategory(category);
+        if (!data.projectCategories) data.projectCategories = [];
+        if (!data.projectCategories.includes(normalized)) {
+          data.projectCategories.push(normalized);
+        }
+        return normalized;
       }
 
       /* ============================================================
