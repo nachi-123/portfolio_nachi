@@ -1565,7 +1565,7 @@
      ========================================================= -->
     <nav id="navbar">
       <div class="nav-inner">
-        <a class="nav-logo" href="#hero" id="nav-logo"> Nachikethus</a>
+        <a class="nav-logo" href="#hero" id="nav-logo">Nachikethus</a>
         <ul class="nav-links" id="nav-links">
           <li><a href="#about">About</a></li>
           <li><a href="#skills">Skills</a></li>
@@ -2187,12 +2187,9 @@
       }
 
       function updateNavLogo(name) {
-        const parts = (name || "").trim().split(" ");
-        const first = parts[0] || "Portfolio";
-        const last = parts.slice(1).join(" ");
         const logo = document.getElementById("nav-logo");
         if (logo)
-          logo.innerHTML = `${escHtml(first)} <span>${escHtml(last.charAt(0) || "")}.</span>`;
+          logo.textContent = (name || "Portfolio").trim() || "Portfolio";
       }
 
       function renderHero(h) {
